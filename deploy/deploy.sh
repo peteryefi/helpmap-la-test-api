@@ -4,7 +4,7 @@
 set -euo pipefail
 
 APP_DIR="/home/ubuntu/helpmap-la-test-api"
-REPO_URL="git@github.com:<your-org>/helpmap-reports-api.git"  # <-- set this
+REPO_URL="git@github.com:peteryefi/helpmap-la-test-api.git"  # <-- set this
 
 if [ ! -d "$APP_DIR" ]; then
     git clone "$REPO_URL" "$APP_DIR"
