@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     # Rate limits, in the slowapi/`limits` mini-language ("N/period").
     RATE_LIMIT_SUBMIT: str = "15/minute"
     RATE_LIMIT_LIST: str = "60/minute"
+    RATE_LIMIT_DELETE: str = "30/minute"
 
     # GET /reports only returns reports created within this many hours.
     # Hardcoded-but-tunable. Common values: 24 (1 day), 48 (2 days),
@@ -30,6 +31,18 @@ class Settings(BaseSettings):
     # -- base64 runs ~33% larger than the underlying image). 8,000,000 chars
     # ≈ 6MB of image data
     MAX_PHOTO_BASE64_CHARS: int = 8_000_000
+
+    # Shared secret gating DELETE /reports/{id}. Everything else on this API
+    # is intentionally open (no auth -- see README), but a delete is
+    # destructive and irreversible, so it gets one narrow exception: the
+    # caller must send this exact value in an `X-Admin-Token` header.
+    #
+    # Empty by default on purpose -- this makes the endpoint fail CLOSED
+    # (503, "not configured") rather than open if you forget to set it,
+    # instead of silently accepting an empty token as valid. Generate a real
+    # value with `openssl rand -hex 32` and set it via .env / the systemd
+    # EnvironmentFile; never commit the real value.
+    ADMIN_DELETE_TOKEN: str = ""
 
     @property
     def cors_origin_list(self) -> List[str]:

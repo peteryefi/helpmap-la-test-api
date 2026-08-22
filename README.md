@@ -143,7 +143,7 @@ avoids that problem entirely, at demo scale.
    load) → attach a static IP.
 2. **Open ports**: in the instance's Networking tab, allow HTTP (80),
    HTTPS (443), and SSH (22, restrict to your IP if possible).
-3. **DNS**: point a subdomain (e.g. `api.helpmap.example`) at the static IP
+3. **DNS**: point a subdomain (e.g. `api-testbed.helpmap.us`) at the static IP
    via Route 53 (see the main architecture memo, Section 3.4 — domain/DNS
    ownership needs confirming regardless).
 4. **First-time setup**, SSH'd into the instance:
@@ -167,8 +167,8 @@ avoids that problem entirely, at demo scale.
    HTTP `fetch()` from an HTTPS page (mixed content), so the API needs a
    real TLS cert, not just an IP address.
 
-After that, `GET https://api.helpmap.example/health` should return
-`{"status": "ok"}`, and `https://api.helpmap.example/docs` gives you an
+After that, `GET https://api-testbed.helpmap.us/health` should return
+`{"status": "ok"}`, and `https://api-testbed.helpmap.us/docs` gives you an
 interactive Swagger UI to test both endpoints by hand.
 
 ### Redeploying

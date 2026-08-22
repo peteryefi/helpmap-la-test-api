@@ -6,6 +6,7 @@ so running tests never touches real demo data.
 import os
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///./data/test_reports.db")
+os.environ.setdefault("ADMIN_DELETE_TOKEN", "test-admin-token-do-not-use-in-prod")
 
 from datetime import datetime, timedelta, timezone  # noqa: E402
 
@@ -160,3 +161,68 @@ def test_report_inside_window_is_included(client):
     listing = client.get("/reports")
     ids = [r["id"] for r in listing.json()]
     assert "window-test-recent" in ids
+
+def test_delete_without_token_rejected(client):
+    payload = {
+        "id": "delete-test-no-token",
+        "description": "Should survive this request",
+        "latitude": 34.09,
+        "longitude": -118.25,
+        "type": "Fire",
+    }
+    client.post("/reports", json=payload)
+
+    resp = client.delete("/reports/delete-test-no-token")
+    assert resp.status_code == 401
+
+    # confirm it wasn't actually deleted
+    listing = client.get("/reports")
+    ids = [r["id"] for r in listing.json()]
+    assert "delete-test-no-token" in ids
+
+def test_delete_with_wrong_token_rejected(client):
+    payload = {
+        "id": "delete-test-wrong-token",
+        "description": "Should survive this request too",
+        "latitude": 34.09,
+        "longitude": -118.25,
+        "type": "Fire",
+    }
+    client.post("/reports", json=payload)
+
+    resp = client.delete(
+        "/reports/delete-test-wrong-token",
+        headers={"X-Admin-Token": "not-the-real-token"},
+    )
+    assert resp.status_code == 401
+
+    listing = client.get("/reports")
+    ids = [r["id"] for r in listing.json()]
+    assert "delete-test-wrong-token" in ids
+
+def test_delete_with_correct_token_succeeds(client):
+    payload = {
+        "id": "delete-test-success",
+        "description": "Should actually be deleted",
+        "latitude": 34.09,
+        "longitude": -118.25,
+        "type": "Fire",
+    }
+    client.post("/reports", json=payload)
+
+    resp = client.delete(
+        "/reports/delete-test-success",
+        headers={"X-Admin-Token": os.environ["ADMIN_DELETE_TOKEN"]},
+    )
+    assert resp.status_code == 204
+
+    listing = client.get("/reports")
+    ids = [r["id"] for r in listing.json()]
+    assert "delete-test-success" not in ids
+
+def test_delete_nonexistent_id_returns_404(client):
+    resp = client.delete(
+        "/reports/this-id-does-not-exist",
+        headers={"X-Admin-Token": os.environ["ADMIN_DELETE_TOKEN"]},
+    )
+    assert resp.status_code == 404
