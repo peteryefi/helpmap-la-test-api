@@ -38,3 +38,12 @@ class ReportOut(BaseModel):
     longitude: float
     createdAt: datetime
     type: str
+
+
+class ReportSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    latitude: float
+    longitude: float
+    type: str

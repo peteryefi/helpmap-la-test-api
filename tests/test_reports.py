@@ -21,6 +21,11 @@ settings = get_settings()
 
 @pytest.fixture(scope="module")
 def client():
+    if settings.DATABASE_URL.startswith("sqlite:///"):
+        db_path = settings.DATABASE_URL.removeprefix("sqlite:///")
+        if db_path and os.path.exists(db_path):
+            os.remove(db_path)
+
     # Entering TestClient as a context manager triggers FastAPI's lifespan
     # (startup/shutdown) events -- without this, init_db() never runs and
     # the `reports` table doesn't exist yet when tests hit the DB.
@@ -51,6 +56,68 @@ def test_submit_and_list_report(client):
     assert listing.status_code == 200
     ids = [r["id"] for r in listing.json()]
     assert created["id"] in ids
+
+
+def test_list_report_returns_summary_shape_only(client):
+    """GET /reports (list) should only expose id/latitude/longitude/type --
+    description, photoUrl, and createdAt live behind GET /reports/{id}."""
+    payload = {
+        "id": "summary-shape-test",
+        "description": "Should not appear in the list response",
+        "photoUrl": "https://example.com/fire.jpg",
+        "latitude": 34.090599,
+        "longitude": -118.2468,
+        "type": "Fire",
+    }
+    client.post("/reports", json=payload)
+
+    listing = client.get("/reports")
+    match = next(r for r in listing.json() if r["id"] == "summary-shape-test")
+    assert set(match.keys()) == {"id", "latitude", "longitude", "type"}
+
+
+def test_get_single_report_returns_full_detail(client):
+    # No createdAt -- defaults to "now" server-side, so this stays inside
+    # REPORT_WINDOW_HOURS regardless of when the test suite runs (unlike
+    # the other fixtures in this file, which pin a fixed date on purpose to
+    # test the id-echo behavior, not window visibility).
+    payload = {
+        "id": "single-fetch-test",
+        "description": "Fire in the park.",
+        "photoUrl": "https://example.com/fire.jpg",
+        "latitude": 34.090599,
+        "longitude": -118.2468,
+        "type": "Fire",
+    }
+    client.post("/reports", json=payload)
+
+    resp = client.get("/reports/single-fetch-test")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == "single-fetch-test"
+    assert body["description"] == payload["description"]
+    assert body["photoUrl"] == payload["photoUrl"]
+
+
+def test_get_single_report_missing_id_returns_404(client):
+    resp = client.get("/reports/this-id-does-not-exist")
+    assert resp.status_code == 404
+
+
+def test_get_single_report_outside_window_returns_404(client):
+    old_time = datetime.now(timezone.utc) - timedelta(hours=settings.REPORT_WINDOW_HOURS + 1)
+    payload = {
+        "id": "single-fetch-window-test",
+        "description": "Old report, should 404 on single-fetch too",
+        "latitude": 34.09,
+        "longitude": -118.25,
+        "createdAt": old_time.isoformat(),
+        "type": "Fire",
+    }
+    client.post("/reports", json=payload)
+
+    resp = client.get("/reports/single-fetch-window-test")
+    assert resp.status_code == 404
 
 
 def test_client_supplied_id_is_honored(client):
@@ -109,9 +176,10 @@ def test_base64_photo_round_trips(client):
     assert resp.status_code == 201
     assert resp.json()["photoUrl"] == fake_photo
 
-    listing = client.get("/reports")
-    match = next(r for r in listing.json() if r["id"] == "photo-test-1")
-    assert match["photoUrl"] == fake_photo
+    # photoUrl no longer comes back from the list endpoint (ReportSummary) --
+    # confirm it round-trips through the single-report endpoint instead.
+    single = client.get("/reports/photo-test-1")
+    assert single.json()["photoUrl"] == fake_photo
 
 
 def test_oversized_photo_rejected(client):
@@ -162,6 +230,7 @@ def test_report_inside_window_is_included(client):
     ids = [r["id"] for r in listing.json()]
     assert "window-test-recent" in ids
 
+
 def test_delete_without_token_rejected(client):
     payload = {
         "id": "delete-test-no-token",
@@ -179,6 +248,7 @@ def test_delete_without_token_rejected(client):
     listing = client.get("/reports")
     ids = [r["id"] for r in listing.json()]
     assert "delete-test-no-token" in ids
+
 
 def test_delete_with_wrong_token_rejected(client):
     payload = {
@@ -200,6 +270,7 @@ def test_delete_with_wrong_token_rejected(client):
     ids = [r["id"] for r in listing.json()]
     assert "delete-test-wrong-token" in ids
 
+
 def test_delete_with_correct_token_succeeds(client):
     payload = {
         "id": "delete-test-success",
@@ -219,6 +290,7 @@ def test_delete_with_correct_token_succeeds(client):
     listing = client.get("/reports")
     ids = [r["id"] for r in listing.json()]
     assert "delete-test-success" not in ids
+
 
 def test_delete_nonexistent_id_returns_404(client):
     resp = client.delete(

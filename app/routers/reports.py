@@ -11,7 +11,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models import Report
 from app.ratelimit import limiter
-from app.schemas import ReportCreate, ReportOut
+from app.schemas import ReportCreate, ReportOut, ReportSummary
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 settings = get_settings()
@@ -50,7 +50,7 @@ def submit_report(request: Request, payload: ReportCreate, db: Session = Depends
     return report
 
 
-@router.get("", response_model=List[ReportOut])
+@router.get("", response_model=List[ReportSummary])
 @limiter.limit(settings.RATE_LIMIT_LIST)
 def list_reports(request: Request, limit: int = 500, db: Session = Depends(get_db)):
     """Return recent reports, newest first, so a refreshed browser sees everyone's data.
@@ -59,14 +59,29 @@ def list_reports(request: Request, limit: int = 500, db: Session = Depends(get_d
     default 24h) are returned.
     """
     limit = max(1, min(limit, 500))
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.REPORT_WINDOW_HOURS)
     return (
         db.query(Report)
-        .filter(Report.createdAt >= cutoff)
+        .filter(Report.createdAt >= _window_cutoff())
         .order_by(desc(Report.createdAt))
         .limit(limit)
         .all()
     )
+
+@router.get("/{report_id}", response_model=ReportOut)
+@limiter.limit(settings.RATE_LIMIT_LIST)
+def get_report(request: Request, report_id: str, db: Session = Depends(get_db)):
+    """Fetch full detail for one report by id (description, photoUrl, etc.)
+    -- the piece GET /reports (list) no longer includes.
+    """
+    report = (
+        db.query(Report)
+        .filter(Report.id == report_id, Report.createdAt >= _window_cutoff())
+        .first()
+    )
+    if report is None:
+        raise HTTPException(status_code=404, detail=f"Report with id '{report_id}' not found.")
+    return report
+
 
 @router.delete("/{report_id}", status_code=204)
 @limiter.limit(settings.RATE_LIMIT_DELETE)
@@ -87,3 +102,9 @@ def delete_report(
         raise HTTPException(status_code=404, detail=f"Report with id '{report_id}' not found.")
     db.delete(report)
     db.commit()
+
+
+def _window_cutoff() -> datetime:
+    """Shared cutoff for both list and single-report reads -- see docstrings
+    below for why the single-report endpoint applies this too."""
+    return datetime.now(timezone.utc) - timedelta(hours=settings.REPORT_WINDOW_HOURS)
