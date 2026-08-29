@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # GET /reports only returns reports created within this many hours.
     # Hardcoded-but-tunable. Common values: 24 (1 day), 48 (2 days),
     # 96 (4 days), 168 (1 week).
-    REPORT_WINDOW_HOURS: int = 24
+    REPORT_WINDOW_HOURS: int = 24*30
 
     # Max length of the base64-encoded photo string (characters, not bytes
     # -- base64 runs ~33% larger than the underlying image). 8,000,000 chars
