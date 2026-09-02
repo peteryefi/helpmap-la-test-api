@@ -50,7 +50,7 @@ def submit_report(request: Request, payload: ReportCreate, db: Session = Depends
     return report
 
 
-@router.get("", response_model=List[ReportOut])
+@router.get("", response_model=List[ReportSummary])
 @limiter.limit(settings.RATE_LIMIT_LIST)
 def list_reports(request: Request, limit: int = 500, db: Session = Depends(get_db)):
     """Return recent reports, newest first, so a refreshed browser sees everyone's data.
